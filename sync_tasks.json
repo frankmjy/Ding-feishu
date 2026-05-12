@@ -4,7 +4,7 @@
       "name": "演练问题同步",
       "env": ".env",
       "line": "LINE 01",
-      "download_mode": "manual",
+      "download_mode": "assisted",
       "description": "钉钉演练问题下载到本地，再写入飞书演练管理多维表。"
     },
     "aliyun_problem": {

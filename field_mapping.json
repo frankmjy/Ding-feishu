@@ -1,15 +1,27 @@
 {
   "key": {
-    "target_field": "序号",
-    "template": "{序号}"
+    "target_field": "问题编码",
+    "template": "WT-{楼栋:drill_building}-{专业}-{演练时间:YYYY/MM/DD}"
   },
-  "field_transforms": {
-    "楼栋": "building"
+  "mappings": {
+    "楼栋": {
+      "target": "演练机楼",
+      "transform": "drill_building"
+    },
+    "专业": "专业",
+    "演练时间": "演练日期",
+    "演练&问题内容描述": "风险&问题内容描述（阿里侧）",
+    "演练得分": "阿里打分"
   },
-  "select_option_transforms": {
-    "楼栋": "building"
+  "defaults": {
+    "风险等级": "低"
   },
-  "mappings": {},
-  "defaults": {},
-  "fill_empty_existing_targets": []
+  "fill_empty_existing_targets": [
+    "演练机楼",
+    "专业",
+    "风险等级",
+    "演练日期",
+    "风险&问题内容描述（阿里侧）",
+    "阿里打分"
+  ]
 }

@@ -28,7 +28,7 @@ DEFAULT_TASKS = {
         "name": "演练问题同步",
         "env": ".env",
         "line": "LINE 01",
-        "download_mode": "manual",
+        "download_mode": "assisted",
         "description": "钉钉演练问题下载到本地，再写入飞书演练管理多维表。",
     },
     "aliyun_problem": {
@@ -208,6 +208,9 @@ def command_for_action(action: str, module_id: str | None = None) -> list[str]:
             return base + ["--skip-download"]
         if action == "download-only":
             raise ValueError("当前链路配置为手动下载，请先手动导出 Excel，再点击“同步本地 Excel”。")
+    if download_mode == "assisted":
+        # Open DingTalk and wait for the user to finish login/export manually.
+        return base + actions[action]
     return base + actions[action]
 
 
@@ -964,7 +967,7 @@ HTML = r"""<!doctype html>
           </div>
 
           <p class="footer-note">
-            手动下载链路会直接读取本地 Excel；自动下载链路会使用独立浏览器打开钉钉并导出。
+            辅助下载链路会打开钉钉并等待你手动完成登录/导出；手动本地链路只读取本地 Excel；自动下载链路会自行点击导出。
           </p>
 
           <h3 style="margin-top: 22px;">运行日志</h3>
@@ -1032,14 +1035,20 @@ HTML = r"""<!doctype html>
       $('feiUrl').textContent = data.targets.feishu_bitable_url || '--';
       $('moduleName').textContent = data.module.name || '表格记录同步';
       $('envPath').textContent = data.module.env || '--';
-      $('downloadMode').textContent = data.module.download_mode === 'manual' ? '手动下载' : '自动下载';
+      const downloadMode = data.module.download_mode || 'auto';
+      $('downloadMode').textContent = {
+        manual: '手动本地',
+        assisted: '打开钉钉，手动点击',
+        auto: '自动下载'
+      }[downloadMode] || downloadMode;
       $('rowCount').textContent = data.excel.row_count ?? '--';
       $('sheetName').textContent = data.module.sheet || '--';
       $('syncMode').textContent = data.module.mode || '--';
       const manualDownload = data.module.download_mode === 'manual';
+      const assistedDownload = data.module.download_mode === 'assisted';
       const fullButton = document.querySelector('[data-action="full"]');
       const downloadButton = document.querySelector('[data-action="download-only"]');
-      if (fullButton) fullButton.textContent = manualDownload ? '同步本地 Excel' : '下载并同步';
+      if (fullButton) fullButton.textContent = manualDownload ? '同步本地 Excel' : (assistedDownload ? '打开钉钉并同步' : '下载并同步');
       if (downloadButton) {
         downloadButton.title = manualDownload ? '当前链路配置为手动下载' : '';
       }

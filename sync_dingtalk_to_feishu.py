@@ -1412,18 +1412,42 @@ def read_excel_rows(path: Path, sheet_name: str | None, header_row: int) -> tupl
         workbook.close()
 
 
-def parse_feishu_url(url: str) -> tuple[str, str]:
+def parse_feishu_bitable_url(url: str) -> tuple[str, str, str]:
     parsed = urlparse(url)
-    match = re.search(r"/wiki/([^/?#]+)", parsed.path)
-    if not match:
-        raise SyncError("FEISHU_BITABLE_URL must be a wiki URL containing /wiki/<token>.")
-    wiki_token = unquote(match.group(1))
+    base_match = re.search(r"/base/([^/?#]+)", parsed.path)
+    if base_match:
+        token_kind = "base"
+        token = unquote(base_match.group(1))
+    else:
+        match = re.search(r"/wiki/([^/?#]+)", parsed.path)
+        if not match:
+            raise SyncError("FEISHU_BITABLE_URL must contain /wiki/<token> or /base/<token>.")
+        token_kind = "wiki"
+        token = unquote(match.group(1))
 
     query = parse_qs(parsed.query)
     table_id = (query.get("table") or [""])[0]
     if not table_id:
         raise SyncError("FEISHU_BITABLE_URL must include a table=<table_id> query parameter.")
-    return wiki_token, table_id
+    return token_kind, token, table_id
+
+
+def parse_feishu_url(url: str) -> tuple[str, str]:
+    token_kind, token, table_id = parse_feishu_bitable_url(url)
+    if token_kind != "wiki":
+        raise SyncError("FEISHU_BITABLE_URL is a /base/ link; use parse_feishu_bitable_url for base links.")
+    return token, table_id
+
+
+def resolve_bitable_target(client: FeishuClient, settings: Settings) -> tuple[str, str]:
+    token_kind, token, table_id = parse_feishu_bitable_url(settings.feishu_bitable_url)
+    if settings.feishu_bitable_app_token:
+        print(f"[feishu] Using FEISHU_BITABLE_APP_TOKEN. Table: {table_id}")
+        return settings.feishu_bitable_app_token, table_id
+    if token_kind == "base":
+        print(f"[feishu] Using Base token from FEISHU_BITABLE_URL. Table: {table_id}")
+        return token, table_id
+    return resolve_bitable_app_token(client, token), table_id
 
 
 class FeishuClient:
@@ -1642,11 +1666,30 @@ def normalize_building(value: Any) -> Any:
     return text
 
 
+def normalize_drill_building(value: Any) -> Any:
+    if value is None or value == "":
+        return value
+    text = str(value).strip()
+    aliases = {
+        "园区": "园区",
+        "园区级": "园区",
+        "110": "110站",
+        "110站": "110站",
+    }
+    if text in aliases:
+        return aliases[text]
+    if re.fullmatch(r"[A-Za-z]", text):
+        return f"{text.upper()}楼"
+    return text
+
+
 def apply_transform(value: Any, transform: str | None) -> Any:
     if not transform:
         return value
     if transform == "building":
         return normalize_building(value)
+    if transform == "drill_building":
+        return normalize_drill_building(value)
     raise SyncError(f"Unsupported field mapping transform: {transform}")
 
 
@@ -1667,7 +1710,7 @@ def render_template_value(template: str, values: dict[str, Any]) -> str:
         transform: str | None = None
         fmt: str | None = None
         for part in parts[1:]:
-            if part in {"building"}:
+            if part in {"building", "drill_building"}:
                 transform = part
             else:
                 fmt = part
@@ -1977,7 +2020,7 @@ def prepare_row_fields(
     key_config = field_mapping.get("key") or {}
     record_key = None
     if isinstance(key_config, dict) and key_config.get("template"):
-        record_key = render_record_key(str(key_config["template"]), raw_fields)
+        record_key = render_template_value(str(key_config["template"]), {**row, **raw_fields})
     return converted_fields, record_key
 
 
@@ -2205,14 +2248,8 @@ def sync_to_feishu(settings: Settings, headers: list[str], rows: list[dict[str, 
     if not rows:
         raise SyncError("Excel has no data rows. Refusing to clear or write the Feishu table.")
 
-    wiki_token, table_id = parse_feishu_url(settings.feishu_bitable_url)
     client = FeishuClient(settings.feishu_app_id, settings.feishu_app_secret, settings.feishu_api_base)
-    if settings.feishu_bitable_app_token:
-        app_token = settings.feishu_bitable_app_token
-        print(f"[feishu] Using FEISHU_BITABLE_APP_TOKEN. Table: {table_id}")
-    else:
-        app_token = resolve_bitable_app_token(client, wiki_token)
-        print(f"[feishu] Resolved wiki token to Bitable app token. Table: {table_id}")
+    app_token, table_id = resolve_bitable_target(client, settings)
 
     fields = list_bitable_fields(client, app_token, table_id)
     fields_by_name = {field.get("field_name"): field for field in fields if field.get("field_name")}
