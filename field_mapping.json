@@ -1,0 +1,15 @@
+{
+  "key": {
+    "target_field": "序号",
+    "template": "{序号}"
+  },
+  "field_transforms": {
+    "楼栋": "building"
+  },
+  "select_option_transforms": {
+    "楼栋": "building"
+  },
+  "mappings": {},
+  "defaults": {},
+  "fill_empty_existing_targets": []
+}

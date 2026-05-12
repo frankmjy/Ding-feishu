@@ -128,8 +128,6 @@ def task_config(module_id: str | None) -> tuple[str, dict[str, str]]:
     tasks = load_task_configs()
     if module_id and module_id in tasks:
         return module_id, tasks[module_id]
-    if "aliyun_problem" in tasks:
-        return "aliyun_problem", tasks["aliyun_problem"]
     first_key = next(iter(tasks))
     return first_key, tasks[first_key]
 

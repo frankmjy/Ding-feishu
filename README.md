@@ -55,3 +55,7 @@ Copy-Item .env.aliyun_problem.example .env.aliyun_problem
 - `楼栋` 会把 `A/B/C...` 转为 `A楼/B楼/C楼...`
 - `跟进人（飞书）` 会按 `现场跟进人` 在配置的飞书群成员中查找账号，查不到则留空
 - 成功后可通过飞书应用发送同步结果和多维表链接
+
+## 运行经验
+
+钉钉导出和登录点位的复盘记录在 `docs/dingtalk-export-runbook.md`。后续如果钉钉 UI 再调整，优先更新这份文档和对应的视觉兜底点位。

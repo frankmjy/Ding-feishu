@@ -59,6 +59,7 @@ class Settings:
     dingtalk_browser_profile: Path
     dingtalk_browser_timeout_sec: int
     dingtalk_auto_click_export: bool
+    dingtalk_auto_login: bool
     dingtalk_export_kind: str
     dingtalk_import_browser_cookies: bool
     dingtalk_browser_cookie_source: str
@@ -221,6 +222,7 @@ def load_settings(args: argparse.Namespace) -> Settings:
         dingtalk_browser_profile=Path(os.getenv("DINGTALK_BROWSER_PROFILE", ".browser/dingtalk")),
         dingtalk_browser_timeout_sec=env_int("DINGTALK_BROWSER_TIMEOUT_SEC", 300),
         dingtalk_auto_click_export=env_bool("DINGTALK_AUTO_CLICK_EXPORT", False),
+        dingtalk_auto_login=env_bool("DINGTALK_AUTO_LOGIN", True),
         dingtalk_export_kind=export_kind,
         dingtalk_import_browser_cookies=env_bool("DINGTALK_IMPORT_BROWSER_COOKIES", True),
         dingtalk_browser_cookie_source=os.getenv("DINGTALK_BROWSER_COOKIE_SOURCE", "auto").strip().lower(),
@@ -795,13 +797,26 @@ def try_click_dingtalk_login_authorize(page: Any, login_hint: str) -> bool:
         body_text = ""
     if "点击头像授权登录" in body_text or "扫码登录" in body_text or "授权登录" in body_text:
         viewport = page.viewport_size or {"width": 1280, "height": 720}
-        # Current DingTalk auth layout puts the account avatar/card on the right side.
-        y = max(360, min(viewport["height"] - 80, 620))
-        for x in [max(20, viewport["width"] - 170), max(20, viewport["width"] - 220), max(20, viewport["width"] - 120)]:
+        width = int(viewport["width"])
+        height = int(viewport["height"])
+        # Current DingTalk auth layout puts the selected account card in the center-right area.
+        ratio_points = [
+            (0.57, 0.55),
+            (0.57, 0.64),
+            (0.50, 0.55),
+            (0.62, 0.55),
+            (0.57, 0.47),
+            (0.88, 0.57),
+        ]
+        points = [(max(20, min(width - 20, int(width * x))), max(80, min(height - 40, int(height * y)))) for x, y in ratio_points]
+        for x, y in dict.fromkeys(points):
             try:
                 page.mouse.click(x, y)
                 page.wait_for_timeout(1200)
-                print(f"[download] Clicked DingTalk login avatar fallback near account hint: {login_hint or 'default account'}")
+                print(
+                    "[download] Clicked DingTalk login avatar fallback "
+                    f"near account hint: {login_hint or 'default account'} at ({x}, {y})."
+                )
                 return True
             except Exception:
                 continue
@@ -914,8 +929,8 @@ def click_native_dingtalk_doc_login_popup() -> bool:
             looks_like_dingtalk_doc_popup = (
                 process_name == "dingtalk.exe"
                 and not title.strip()
-                and 360 <= width <= 520
-                and 420 <= height <= 620
+                and 360 <= width <= 720
+                and 420 <= height <= 860
             )
 
             candidates.append(
@@ -960,7 +975,7 @@ def click_native_dingtalk_doc_login_popup() -> bool:
 
         candidate = sorted(actionable, key=score, reverse=True)[0]
         click_x = int(candidate["left"] + candidate["width"] * 0.5)
-        click_y = int(candidate["top"] + candidate["height"] * 0.74)
+        click_y = int(candidate["top"] + candidate["height"] * 0.76)
         hwnd = candidate["hwnd"]
         user32.ShowWindow(hwnd, 9)  # SW_RESTORE
         user32.SetForegroundWindow(hwnd)
@@ -1002,13 +1017,18 @@ def close_stale_dingtalk_preview_pages(context: Any, keep_page: Any) -> None:
             continue
 
 
-def wait_until_dingtalk_document_page(page: Any, timeout_sec: int, login_hint: str = "") -> bool:
+def wait_until_dingtalk_document_page(
+    page: Any,
+    timeout_sec: int,
+    login_hint: str = "",
+    auto_login: bool = True,
+) -> bool:
     deadline = time.time() + timeout_sec
     last_click_at = 0.0
     while time.time() < deadline:
         if not is_dingtalk_login_page(page):
             return True
-        if login_hint and time.time() - last_click_at > 5:
+        if auto_login and login_hint and time.time() - last_click_at > 5:
             if not try_click_dingtalk_doc_login_window(page.context, login_hint):
                 click_native_dingtalk_doc_login_popup()
             if try_click_dingtalk_login_authorize(page, login_hint):
@@ -1022,6 +1042,24 @@ def is_dingtalk_desktop_page(page: Any) -> bool:
     try:
         parsed = urlparse(page.url)
         return parsed.netloc.endswith("alidocs.dingtalk.com") and parsed.path.rstrip("/") == "/i/desktop"
+    except Exception:
+        return False
+
+
+def is_dingtalk_document_list_page(page: Any, doc_title: str) -> bool:
+    if is_dingtalk_desktop_page(page):
+        return True
+    if not doc_title:
+        return False
+    try:
+        parsed = urlparse(page.url)
+        if not parsed.netloc.endswith("alidocs.dingtalk.com"):
+            return False
+        if parsed.path.startswith("/i/nodes/"):
+            return False
+        title = page.title()
+        body_text = page.locator("body").inner_text(timeout=1000)
+        return doc_title in body_text and ("首页" in body_text or "最近" in body_text or title.startswith("文档"))
     except Exception:
         return False
 
@@ -1080,21 +1118,35 @@ def click_dingtalk_document_title(page: Any, doc_title: str, timeout_ms: int = 1
     return page
 
 
-def ensure_dingtalk_target_page(page: Any, url: str, doc_title: str, login_hint: str, timeout_sec: int) -> Any:
-    settle_dingtalk_doc_login_windows(page.context, login_hint, seconds=3)
+def ensure_dingtalk_target_page(
+    page: Any,
+    url: str,
+    doc_title: str,
+    login_hint: str,
+    timeout_sec: int,
+    auto_login: bool,
+) -> Any:
+    if auto_login:
+        settle_dingtalk_doc_login_windows(page.context, login_hint, seconds=3)
     if is_dingtalk_login_page(page):
+        login_mode = "Complete login once" if auto_login else "Complete the login manually"
         print(
             "[download] DingTalk login is required in the opened browser. "
-            "Complete login once; Excel export will continue automatically."
+            f"{login_mode}; Excel export will continue automatically."
         )
-        if not wait_until_dingtalk_document_page(page, timeout_sec=timeout_sec, login_hint=login_hint):
+        if not wait_until_dingtalk_document_page(
+            page,
+            timeout_sec=timeout_sec,
+            login_hint=login_hint,
+            auto_login=auto_login,
+        ):
             raise SyncError(f"Timed out after {timeout_sec}s waiting for DingTalk login to complete.")
         print("[download] Login completed; reopening configured DingTalk URL.")
         page.goto(url, wait_until="domcontentloaded", timeout=60_000)
         page.wait_for_load_state("domcontentloaded", timeout=60_000)
         page.wait_for_timeout(3000)
 
-    if is_dingtalk_desktop_page(page):
+    if is_dingtalk_document_list_page(page, doc_title):
         if not doc_title:
             raise SyncError(
                 "DingTalk opened the document desktop instead of the target document. "
@@ -1103,7 +1155,8 @@ def ensure_dingtalk_target_page(page: Any, url: str, doc_title: str, login_hint:
         page = click_dingtalk_document_title(page, doc_title)
         page.wait_for_timeout(4000)
 
-    settle_dingtalk_doc_login_windows(page.context, login_hint, seconds=5)
+    if auto_login:
+        settle_dingtalk_doc_login_windows(page.context, login_hint, seconds=5)
     close_stale_dingtalk_preview_pages(page.context, page)
     print(f"[download] Browser page: {page.title()} | {page.url}")
     return page
@@ -1166,6 +1219,7 @@ def download_with_browser(
     profile_dir: Path,
     timeout_sec: int,
     auto_click_export: bool,
+    auto_login: bool,
     export_kind: str,
     import_browser_cookies: bool,
     browser_cookie_source: str,
@@ -1227,11 +1281,12 @@ def download_with_browser(
             print(f"[download] Opening configured DingTalk URL: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=60_000)
             page.bring_to_front()
-            page = ensure_dingtalk_target_page(page, url, doc_title, login_hint, timeout_sec)
+            page = ensure_dingtalk_target_page(page, url, doc_title, login_hint, timeout_sec, auto_login)
 
             download = None
             if auto_click_export:
-                settle_dingtalk_doc_login_windows(context, login_hint, seconds=5)
+                if auto_login:
+                    settle_dingtalk_doc_login_windows(context, login_hint, seconds=5)
                 close_stale_dingtalk_preview_pages(context, page)
                 print("[download] Trying configured auto-click export selectors...")
                 download = try_auto_click_export(page, timeout_ms=15_000, export_kind=export_kind)
@@ -1280,6 +1335,7 @@ def download_dingtalk_excel(settings: Settings) -> Path:
                     settings.dingtalk_browser_profile,
                     settings.dingtalk_browser_timeout_sec,
                     settings.dingtalk_auto_click_export,
+                    settings.dingtalk_auto_login,
                     settings.dingtalk_export_kind,
                     settings.dingtalk_import_browser_cookies,
                     settings.dingtalk_browser_cookie_source,
@@ -1688,6 +1744,9 @@ def load_field_mapping(path: Path | None) -> dict[str, Any]:
 
 def source_headers_from_mapping(field_mapping: dict[str, Any]) -> set[str]:
     headers: set[str] = set(mapping_entries(field_mapping).keys())
+    key_config = field_mapping.get("key") or {}
+    if isinstance(key_config, dict) and key_config.get("template"):
+        headers.update(collect_template_values(str(key_config["template"])))
     for target_config in (field_mapping.get("derived_fields") or {}).values():
         if isinstance(target_config, dict):
             source = target_config.get("source")
