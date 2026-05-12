@@ -1475,6 +1475,15 @@ class FeishuClient:
                     "permission, reinstall or republish the app, and add the app as a collaborator on "
                     "the target Bitable if required."
                 )
+            elif code == 131005:
+                msg = str(msg).rstrip(".。")
+                msg = (
+                    f"{msg}. The target wiki/Base node is not visible to this Feishu app. "
+                    "If FEISHU_BITABLE_URL is a /wiki/ link, either add the app as a collaborator "
+                    "on the target Base/wiki so it can resolve the wiki node, or set "
+                    "FEISHU_BITABLE_APP_TOKEN in the corresponding .env file to the real Base token. "
+                    "The app still needs Bitable read/write permission on that Base."
+                )
             elif code == 91403:
                 msg = (
                     f"{msg}. The Bitable app_token/table_id was resolved, but this Feishu app is not "
