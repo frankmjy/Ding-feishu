@@ -1,0 +1,16 @@
+{
+  "tasks": {
+    "drill": {
+      "name": "演练问题同步",
+      "env": ".env",
+      "line": "LINE 01",
+      "description": "钉钉演练问题下载到本地，再写入飞书演练管理多维表。"
+    },
+    "aliyun_problem": {
+      "name": "EA118问题表模块",
+      "env": ".env.aliyun_problem",
+      "line": "LINE 02",
+      "description": "钉钉问题 Excel 无附件导出，再同步到飞书多维表【阿里问题登记簿】。"
+    }
+  }
+}

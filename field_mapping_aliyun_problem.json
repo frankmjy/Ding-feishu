@@ -1,0 +1,29 @@
+{
+  "key": {
+    "target_field": "序号",
+    "template": "{序号}"
+  },
+  "field_transforms": {
+    "楼栋": "building"
+  },
+  "derived_fields": {
+    "自动编码": {
+      "template": "{楼栋:building}-{发现时间:YYYY/MM/DD}-{风险等级}-{风险状态}"
+    },
+    "跟进人（飞书）": {
+      "source": "现场跟进人",
+      "transform": "feishu_user"
+    }
+  },
+  "select_option_transforms": {
+    "楼栋": "building"
+  },
+  "update_existing_targets": [
+    "自动编码",
+    "楼栋",
+    "跟进人（飞书）"
+  ],
+  "mappings": {},
+  "defaults": {},
+  "fill_empty_existing_targets": []
+}

@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+!.env.aliyun_problem.example
+.browser/
+downloads/
+logs/
+__pycache__/
+*.pyc
+.venv/
+debug_*.png
