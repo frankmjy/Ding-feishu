@@ -2,8 +2,8 @@
 
 ## 演练问题文档
 
-- 演练链路默认 `DINGTALK_AUTO_LOGIN=false`：浏览器停在登录页时由人工完成一次登录，随后脚本继续自动打开文档、导出 Excel、同步飞书。
-- 如果确实要自动登录，可改为 `DINGTALK_AUTO_LOGIN=true`；登录页优先点击账号名，备用点位点击页面中右侧头像卡片区域。
+- 演练链路在 `sync_tasks.json` 中配置为 `download_mode=manual`：Excel 由人工从钉钉导出到 `downloads/dingtalk_drill_latest.xlsx`，控制台只读取本地 Excel 并同步飞书。
+- 如果确实要恢复自动下载，可把演练链路改为 `download_mode=auto`，并在 `.env` 中打开 `DINGTALK_AUTO_LOGIN=true`；登录页优先点击账号名，备用点位点击页面中右侧头像卡片区域。
 - 登录后如果被带到钉钉文档首页/最近列表，则按 `DINGTALK_DOC_TITLE` 点击目标文档。
 - 演练链路使用独立本地文件 `downloads/dingtalk_drill_latest.xlsx`，避免和 EA118 问题表下载文件混用。
 - 演练链路默认读取工作表 `演练问题`，按 Excel 里的 `序号` 去重，只新增缺失记录。

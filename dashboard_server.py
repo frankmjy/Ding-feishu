@@ -28,12 +28,14 @@ DEFAULT_TASKS = {
         "name": "演练问题同步",
         "env": ".env",
         "line": "LINE 01",
+        "download_mode": "manual",
         "description": "钉钉演练问题下载到本地，再写入飞书演练管理多维表。",
     },
     "aliyun_problem": {
         "name": "EA118问题表模块",
         "env": ".env.aliyun_problem",
         "line": "LINE 02",
+        "download_mode": "auto",
         "description": "钉钉问题 Excel 无附件导出，再同步到飞书多维表【阿里问题登记簿】。",
     },
 }
@@ -119,6 +121,7 @@ def load_task_configs() -> dict[str, dict[str, str]]:
             "name": str(value.get("name") or key),
             "env": env,
             "line": str(value.get("line") or ""),
+            "download_mode": str(value.get("download_mode") or "auto"),
             "description": str(value.get("description") or ""),
         }
     return tasks or dict(DEFAULT_TASKS)
@@ -170,6 +173,7 @@ def read_status(module_id: str | None = None) -> dict[str, Any]:
             "sheet": settings.sheet_name or "第一个工作表",
             "mode": settings.sync_mode,
             "mapping": str(settings.field_mapping_file) if settings.field_mapping_file else "",
+            "download_mode": selected_task.get("download_mode", "auto"),
         },
         "modules": [
             {"id": key, **value}
@@ -190,6 +194,7 @@ def read_status(module_id: str | None = None) -> dict[str, Any]:
 def command_for_action(action: str, module_id: str | None = None) -> list[str]:
     _, selected_task = task_config(module_id)
     base = [sys.executable, "-u", "-X", "utf8", str(ROOT / "sync_dingtalk_to_feishu.py"), "--env", selected_task["env"]]
+    download_mode = selected_task.get("download_mode", "auto")
     actions = {
         "full": [],
         "sync-local": ["--skip-download"],
@@ -198,6 +203,11 @@ def command_for_action(action: str, module_id: str | None = None) -> list[str]:
     }
     if action not in actions:
         raise ValueError(f"Unsupported action: {action}")
+    if download_mode == "manual":
+        if action == "full":
+            return base + ["--skip-download"]
+        if action == "download-only":
+            raise ValueError("当前链路配置为手动下载，请先手动导出 Excel，再点击“同步本地 Excel”。")
     return base + actions[action]
 
 
@@ -936,6 +946,7 @@ HTML = r"""<!doctype html>
           <div class="meta-grid" aria-label="链路选择" style="margin-bottom: 14px;">
             <label class="meta" for="moduleSelect"><span>当前链路</span><select id="moduleSelect"></select></label>
             <div class="meta"><span>配置文件</span><code id="envPath">--</code></div>
+            <div class="meta"><span>下载方式</span><code id="downloadMode">--</code></div>
           </div>
           <div class="actions">
             <button class="btn primary" data-action="full">下载并同步</button>
@@ -953,7 +964,7 @@ HTML = r"""<!doctype html>
           </div>
 
           <p class="footer-note">
-            如果选择“下载并同步”，钉钉会使用独立的自动化浏览器；若出现登录页，请在该窗口完成一次登录，随后会重新打开配置的目标文档并继续导出。
+            手动下载链路会直接读取本地 Excel；自动下载链路会使用独立浏览器打开钉钉并导出。
           </p>
 
           <h3 style="margin-top: 22px;">运行日志</h3>
@@ -968,6 +979,7 @@ HTML = r"""<!doctype html>
     const buttons = [...document.querySelectorAll('[data-action]')];
     const stopButton = $('stopTask');
     const moduleSelect = $('moduleSelect');
+    let currentModule = {};
 
     function taskLabel(status) {
       return {
@@ -989,7 +1001,10 @@ HTML = r"""<!doctype html>
       if (task.status === 'error') dot.classList.add('error');
       $('taskText').textContent = taskLabel(task.status);
       const isActive = task.status === 'running' || task.status === 'stopping';
-      buttons.forEach((btn) => btn.disabled = isActive);
+      buttons.forEach((btn) => {
+        const manualDownload = currentModule.download_mode === 'manual';
+        btn.disabled = isActive || (manualDownload && btn.dataset.action === 'download-only');
+      });
       stopButton.disabled = task.status !== 'running' || task.can_stop === false;
       const lines = task.logs || [];
       $('logs').textContent = lines.length ? lines.join('\n') : '还没有任务日志。选择上方按钮开始。';
@@ -997,6 +1012,7 @@ HTML = r"""<!doctype html>
     }
 
     function renderStatus(data) {
+      currentModule = data.module || {};
       if (moduleSelect && data.modules) {
         const selected = data.module.id;
         if (!moduleSelect.options.length || moduleSelect.dataset.loaded !== '1') {
@@ -1016,9 +1032,17 @@ HTML = r"""<!doctype html>
       $('feiUrl').textContent = data.targets.feishu_bitable_url || '--';
       $('moduleName').textContent = data.module.name || '表格记录同步';
       $('envPath').textContent = data.module.env || '--';
+      $('downloadMode').textContent = data.module.download_mode === 'manual' ? '手动下载' : '自动下载';
       $('rowCount').textContent = data.excel.row_count ?? '--';
       $('sheetName').textContent = data.module.sheet || '--';
       $('syncMode').textContent = data.module.mode || '--';
+      const manualDownload = data.module.download_mode === 'manual';
+      const fullButton = document.querySelector('[data-action="full"]');
+      const downloadButton = document.querySelector('[data-action="download-only"]');
+      if (fullButton) fullButton.textContent = manualDownload ? '同步本地 Excel' : '下载并同步';
+      if (downloadButton) {
+        downloadButton.title = manualDownload ? '当前链路配置为手动下载' : '';
+      }
       $('excelPath').textContent = data.excel.path || '--';
       $('mappingPath').textContent = data.module.mapping || '--';
       $('appId').textContent = data.targets.feishu_app_id || '--';
