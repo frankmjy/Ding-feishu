@@ -163,8 +163,9 @@ def require_env(name: str) -> str:
 
 
 def load_settings(args: argparse.Namespace) -> Settings:
-    env_path = Path(args.env)
-    base_env_path = Path(".env")
+    env_path = Path(args.env).resolve()
+    env_dir = env_path.parent
+    base_env_path = Path(".env").resolve()
     if env_path.resolve() != base_env_path.resolve() and base_env_path.exists():
         load_env_file(base_env_path, override=False)
     load_env_file(env_path, override=True)
@@ -202,6 +203,11 @@ def load_settings(args: argparse.Namespace) -> Settings:
         "FEISHU_NOTIFY_ENABLED",
         bool(notify_webhook_url or notify_chat_id or notify_open_id),
     )
+    browser_profile = Path(os.getenv("DINGTALK_BROWSER_PROFILE", ".browser/dingtalk")).expanduser()
+    if not browser_profile.is_absolute():
+        browser_profile = (env_dir / browser_profile).resolve()
+    else:
+        browser_profile = browser_profile.resolve()
 
     return Settings(
         dingtalk_doc_url=require_env("DINGTALK_DOC_URL"),
@@ -219,7 +225,7 @@ def load_settings(args: argparse.Namespace) -> Settings:
         header_row=header_row,
         create_missing_fields=create_missing,
         dingtalk_download_mode=download_mode,
-        dingtalk_browser_profile=Path(os.getenv("DINGTALK_BROWSER_PROFILE", ".browser/dingtalk")),
+        dingtalk_browser_profile=browser_profile,
         dingtalk_browser_timeout_sec=env_int("DINGTALK_BROWSER_TIMEOUT_SEC", 300),
         dingtalk_auto_click_export=env_bool("DINGTALK_AUTO_CLICK_EXPORT", False),
         dingtalk_auto_login=env_bool("DINGTALK_AUTO_LOGIN", True),
