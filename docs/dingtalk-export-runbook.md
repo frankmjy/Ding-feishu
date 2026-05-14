@@ -16,6 +16,7 @@
 - 出现高级权限提示时点击“继续下载”。
 - 出现“导出为 Excel”弹窗时先取消勾选“包含所选范围中的附件”，再点击最终“导出”。
 - 下载文件使用 `downloads/dingtalk_bitable_no_attachment_latest.xlsx`，同步到飞书【阿里问题登记簿】。
+- EA118 链路固定使用 `SYNC_MODE=replace`：同步前删除飞书目标表原有记录，再按最新 Excel 全量新建，适合让飞书表完全跟随钉钉问题表。
 
 ## 易踩坑
 

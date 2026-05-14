@@ -52,7 +52,8 @@ Copy-Item .env.aliyun_problem.example .env.aliyun_problem
 
 - 钉钉多维表导出走 `DINGTALK_EXPORT_KIND=bitable`
 - 导出 Excel 时取消“包含所选范围中的附件”
-- 同步模式使用 `insert_missing`，按 `序号` 去重
+- 同步模式使用 `replace`，同步前删除飞书原有记录，再按最新 Excel 全量重建
+- 全量重建会刷新飞书记录创建时间，并移除飞书侧只存在于旧记录上的人工补充内容
 - 派生 `自动编码`：`楼栋-发现时间-风险等级-风险状态`
 - `楼栋` 会把 `A/B/C...` 转为 `A楼/B楼/C楼...`
 - `跟进人（飞书）` 会按 `现场跟进人` 在配置的飞书群成员中查找账号，查不到则留空
